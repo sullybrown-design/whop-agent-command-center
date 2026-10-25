@@ -1,11 +1,41 @@
 """Local-only prototype API. Add authentication before any public deployment."""
 from pathlib import Path
+import os
+import secrets
+from fastapi import Depends, Header, Request
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi.responses import JSONResponse
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field, HttpUrl
 from backend import store
 
+security = HTTPBasic(auto_error=False)
+
+def require_admin(credentials: HTTPBasicCredentials | None = Depends(security)):
+    token = os.getenv("ADMIN_TOKEN", "")
+    if not token or credentials is None or not (secrets.compare_digest(credentials.username, "admin") and secrets.compare_digest(credentials.password, token)):
+        raise HTTPException(status_code=401, detail="Authentication required", headers={"WWW-Authenticate": "Basic"})
+
 app = FastAPI(title="Whop Agent Command Center", version="0.1.0")
+@app.middleware("http")
+async def auth_gate(request: Request, call_next):
+    if request.url.path == "/api/health":
+        return await call_next(request)
+    from fastapi.security.utils import get_authorization_scheme_param
+    from base64 import b64decode
+    auth = request.headers.get("authorization", "")
+    scheme, param = get_authorization_scheme_param(auth)
+    try:
+        decoded = b64decode(param, validate=True).decode("utf-8") if scheme.lower() == "basic" else ""
+        username, password = decoded.split(":", 1)
+    except (ValueError, UnicodeError):
+        username, password = "", ""
+    token = os.getenv("ADMIN_TOKEN", "")
+    if not token or not (secrets.compare_digest(username, "admin") and secrets.compare_digest(password, token)):
+        return JSONResponse({"detail": "Authentication required"}, status_code=401, headers={"WWW-Authenticate": 'Basic realm="Mission Control"'})
+    return await call_next(request)
+
 DASHBOARD = Path(__file__).resolve().parent.parent / "dashboard" / "index.html"
 
 class JobRequest(BaseModel):
@@ -16,7 +46,7 @@ class JobRequest(BaseModel):
 def home():
     return FileResponse(DASHBOARD)
 
-@app.get("/api/health")
+@app.get("/api/health", dependencies=[])
 def health():
     return {"status": "ok", "mode": "prototype", "publishing_enabled": False}
 
