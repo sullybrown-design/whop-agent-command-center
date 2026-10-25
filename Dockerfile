@@ -7,6 +7,7 @@ COPY dashboard ./dashboard
 COPY integrations ./integrations
 RUN pip install --no-cache-dir .
 RUN useradd --create-home appuser
+RUN mkdir -p /app/data && chown appuser:appuser /app/data
 USER appuser
 EXPOSE 8000
 CMD ["sh", "-c", "uvicorn backend.api:app --host 0.0.0.0 --port ${PORT:-8000}"]
