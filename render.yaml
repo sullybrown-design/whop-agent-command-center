@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: whop-agent-command-center
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    envVars:
+      - key: ADMIN_TOKEN
+        generateValue: true
+      - key: PYTHONUNBUFFERED
+        value: "1"
