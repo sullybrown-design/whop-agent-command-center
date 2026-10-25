@@ -114,3 +114,30 @@ def approve(job_id: str, request: ReviewRequest):
     if request.decision != "approve":
         raise HTTPException(status_code=422, detail="Use /review for a rework decision")
     return review(job_id, request)
+
+from backend import local_bridge
+
+class ResearchRequest(BaseModel):
+    niche: str = Field(default="Streamer moments", min_length=1, max_length=200)
+    topic: str = Field(default="", max_length=1500)
+    direction: str = Field(default="", max_length=2500)
+
+@app.get("/api/local/state")
+def local_state():
+    return local_bridge.snapshot()
+
+@app.post("/api/local/research", status_code=202)
+def local_research(request: ResearchRequest):
+    try:
+        result = local_bridge.start_research(request.model_dump())
+        return {"id": result.get("id"), "status": result.get("status")}
+    except ValueError as error:
+        raise HTTPException(status_code=409, detail=str(error)) from None
+
+@app.get("/api/local/clips/{clip_id}/video")
+def local_video(clip_id: str):
+    base = local_bridge.root()
+    path = local_bridge.video_path(base, clip_id) if base else None
+    if path is None:
+        raise HTTPException(status_code=404, detail="Clip not found")
+    return FileResponse(path, media_type="video/mp4", headers={"Cache-Control": "private, no-store"})
